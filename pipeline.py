@@ -1,0 +1,104 @@
+"""
+Data Quality Pipeline
+----------------------
+Le um arquivo CSV, valida a qualidade dos dados e gera um relatorio
+apontando problemas encontrados. O pipeline NAO corrige os dados
+automaticamente - ele alerta, e quem decide o que fazer e a pessoa
+responsavel pelos dados (mesmo principio de um sistema de apoio a
+decisao: alerta, nao decide sozinho).
+
+Uso:
+    python pipeline.py caminho/para/arquivo.csv
+"""
+
+import sys
+import pandas as pd
+from datetime import datetime
+
+
+def carregar_dados(caminho_arquivo):
+    """Etapa 1: Entrada - le o arquivo CSV ou Excel, detectando pela extensao."""
+    if caminho_arquivo.endswith(".csv"):
+        return pd.read_csv(caminho_arquivo)
+    elif caminho_arquivo.endswith((".xlsx", ".xls")):
+        return pd.read_excel(caminho_arquivo)
+    else:
+        raise ValueError(
+            "Formato de arquivo nao suportado. Use um arquivo .csv, .xlsx ou .xls."
+        )
+
+
+def checar_duplicatas(df):
+    """Verifica linhas duplicadas com base em nome + data de nascimento."""
+    duplicadas = df[df.duplicated(subset=["nome", "data_nascimento"], keep=False)]
+    if not duplicadas.empty:
+        return f"{len(duplicadas)} linhas duplicadas encontradas (ids: {list(duplicadas['id'])})"
+    return None
+
+
+def checar_campos_vazios(df, colunas):
+    """Verifica campos obrigatorios vazios em cada coluna informada."""
+    alertas = []
+    for coluna in colunas:
+        vazios = df[df[coluna].isna()]
+        if not vazios.empty:
+            alertas.append(f"Campo '{coluna}' vazio nos ids: {list(vazios['id'])}")
+    return alertas
+
+
+def checar_datas_invalidas(df, ano_minimo=1920):
+    """Verifica datas de nascimento no futuro ou anteriores ao ano_minimo."""
+    alertas = []
+    hoje = datetime.now()
+    datas = pd.to_datetime(df["data_nascimento"], errors="coerce")
+
+    futuras = df[datas > hoje]
+    if not futuras.empty:
+        alertas.append(f"Data de nascimento no futuro nos ids: {list(futuras['id'])}")
+
+    antigas = df[datas.dt.year < ano_minimo]
+    if not antigas.empty:
+        alertas.append(f"Data de nascimento improvavel (antes de {ano_minimo}) nos ids: {list(antigas['id'])}")
+
+    return alertas
+
+
+def gerar_relatorio(problemas):
+    """Etapa 3: Relatorio - imprime os alertas encontrados."""
+    print("\n=== RELATORIO DE QUALIDADE ===")
+    if problemas:
+        for i, p in enumerate(problemas, 1):
+            print(f"{i}. {p}")
+    else:
+        print("Nenhum problema encontrado.")
+    print(f"\nTotal de alertas: {len(problemas)}")
+
+
+def rodar_pipeline(caminho_arquivo):
+    """Executa o pipeline completo: entrada -> validacao -> relatorio."""
+    df = carregar_dados(caminho_arquivo)
+
+    print("=== DADOS ORIGINAIS ===")
+    print(df)
+    print(f"\nTotal de linhas: {len(df)}")
+
+    problemas = []
+
+    dup = checar_duplicatas(df)
+    if dup:
+        problemas.append(dup)
+
+    problemas.extend(checar_campos_vazios(df, colunas=["idade", "cidade"]))
+    problemas.extend(checar_datas_invalidas(df))
+
+    gerar_relatorio(problemas)
+    return problemas
+
+
+if __name__ == "__main__":
+    if len(sys.argv) < 2:
+        print("Uso: python pipeline.py caminho/para/arquivo.csv")
+        sys.exit(1)
+
+    caminho = sys.argv[1]
+    rodar_pipeline(caminho)
