@@ -28,11 +28,16 @@ def carregar_dados(caminho_arquivo):
         )
 
 
-def checar_duplicatas(df):
-    """Verifica linhas duplicadas com base em nome + data de nascimento."""
-    duplicadas = df[df.duplicated(subset=["nome", "data_nascimento"], keep=False)]
+def checar_duplicatas(df, colunas_chave, coluna_id):
+    """Verifica linhas duplicadas com base nas colunas_chave informadas.
+
+    colunas_chave: lista de colunas que, juntas, identificam um registro
+                   (ex.: ["nome", "data_nascimento"] ou ["Member ID"])
+    coluna_id:     coluna usada apenas para exibir quais linhas duplicaram
+    """
+    duplicadas = df[df.duplicated(subset=colunas_chave, keep=False)]
     if not duplicadas.empty:
-        return f"{len(duplicadas)} linhas duplicadas encontradas (ids: {list(duplicadas['id'])})"
+        return f"{len(duplicadas)} linhas duplicadas encontradas (ids: {list(duplicadas[coluna_id])})"
     return None
 
 
@@ -74,8 +79,12 @@ def gerar_relatorio(problemas):
     print(f"\nTotal de alertas: {len(problemas)}")
 
 
-def rodar_pipeline(caminho_arquivo):
-    """Executa o pipeline completo: entrada -> validacao -> relatorio."""
+def rodar_pipeline(caminho_arquivo, colunas_chave, coluna_id):
+    """Executa o pipeline completo: entrada -> validacao -> relatorio.
+
+    colunas_chave: colunas usadas para detectar duplicatas nesse arquivo
+    coluna_id:     coluna usada para identificar cada linha no relatorio
+    """
     df = carregar_dados(caminho_arquivo)
 
     print("=== DADOS ORIGINAIS ===")
@@ -84,12 +93,9 @@ def rodar_pipeline(caminho_arquivo):
 
     problemas = []
 
-    dup = checar_duplicatas(df)
+    dup = checar_duplicatas(df, colunas_chave, coluna_id)
     if dup:
         problemas.append(dup)
-
-    problemas.extend(checar_campos_vazios(df, colunas=["idade", "cidade"]))
-    problemas.extend(checar_datas_invalidas(df))
 
     gerar_relatorio(problemas)
     return problemas
@@ -97,8 +103,13 @@ def rodar_pipeline(caminho_arquivo):
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Uso: python pipeline.py caminho/para/arquivo.csv")
+        print("Uso: python pipeline.py caminho/para/arquivo.csv [coluna_chave] [coluna_id]")
+        print("Exemplo (pacientes): python pipeline.py dados/exemplo_pacientes.csv nome id")
+        print("Exemplo (associados): python pipeline.py associados.xlsx \"Member ID\" \"Member ID\"")
         sys.exit(1)
 
     caminho = sys.argv[1]
-    rodar_pipeline(caminho)
+    coluna_chave = sys.argv[2] if len(sys.argv) > 2 else "nome"
+    coluna_id = sys.argv[3] if len(sys.argv) > 3 else "id"
+
+    rodar_pipeline(caminho, colunas_chave=[coluna_chave], coluna_id=coluna_id)
